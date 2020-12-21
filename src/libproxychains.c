@@ -112,6 +112,7 @@ static void do_init(void) {
 	get_chain_data(proxychains_pd, &proxychains_proxy_count, &proxychains_ct);
 
 	proxychains_write_log(LOG_PREFIX "DLL init\n");
+    PDEBUG("##@@## %s,%d",__FUNCTION__,__LINE__);
 	SETUP_SYM(connect);
 	SETUP_SYM(gethostbyname);
 	SETUP_SYM(getaddrinfo);
@@ -218,6 +219,8 @@ static void get_chain_data(proxy_data * pd, unsigned int *proxy_count, chain_typ
 
 				pd[count].ip.as_int = (uint32_t) inet_addr(host);
 				pd[count].port = htons((unsigned short) port_n);
+
+                PDEBUG("##@@##, configfile: %s %s %d %s %s\n", type, host, pd[count].port, pd[count].user, pd[count].pass);
 
 				if(!strcmp(type, "http")) {
 					pd[count].pt = HTTP_TYPE;
@@ -371,8 +374,9 @@ static void simple_socks5_env(proxy_data *pd, unsigned int *proxy_count, chain_t
 	load_default_settings(ct);
 
 	port_string = getenv(PROXYCHAINS_SOCKS5_PORT_ENV_VAR);
+    PDEBUG("##@@##, %s,%d, port_string=%s\n",__FUNCTION__,__LINE__,port_string);
 
-	if(!port_string)
+	if(!port_string) //skip
 		return;
         
         host_string = getenv(PROXYCHAINS_SOCKS5_HOST_ENV_VAR);
@@ -415,7 +419,7 @@ int connect(int sock, const struct sockaddr *addr, socklen_t len) {
 	optlen = sizeof(socktype);
 	getsockopt(sock, SOL_SOCKET, SO_TYPE, &socktype, &optlen);
 	if(!(SOCKFAMILY(*addr) == AF_INET && socktype == SOCK_STREAM))
-		return true_connect(sock, addr, len);
+		return true_connect(sock, addr, len); //##@@##
 
 	p_addr_in = &((struct sockaddr_in *) addr)->sin_addr;
 	port = ntohs(((struct sockaddr_in *) addr)->sin_port);
@@ -423,7 +427,7 @@ int connect(int sock, const struct sockaddr *addr, socklen_t len) {
 #ifdef DEBUG
 //      PDEBUG("localnet: %s; ", inet_ntop(AF_INET,&in_addr_localnet, str, sizeof(str)));
 //      PDEBUG("netmask: %s; " , inet_ntop(AF_INET, &in_addr_netmask, str, sizeof(str)));
-	PDEBUG("target: %s\n", inet_ntop(AF_INET, p_addr_in, str, sizeof(str)));
+	PDEBUG("##@@## target: %s\n", inet_ntop(AF_INET, p_addr_in, str, sizeof(str)));
 	PDEBUG("port: %d\n", port);
 #endif
 
@@ -441,17 +445,19 @@ int connect(int sock, const struct sockaddr *addr, socklen_t len) {
 			if(!dnats[i].orig_port)
 				dnat = &dnats[i];
 
-	if (dnat) {
+	if (dnat) { //##@@## skip
+        PDEBUG("##@@##dnat, %s,%d\n",__FUNCTION__,__LINE__);
 		if (dnat->new_port)
 			new_addr.sin_port = htons(dnat->new_port);
 		else
 			new_addr.sin_port = htons(port);
 		new_addr.sin_addr = dnat->new_dst;
 
-		addr = (struct sockaddr *)&new_addr;
+		addr = (struct sockaddr *)&new_addr; //##@@##
 		p_addr_in = &((struct sockaddr_in *) addr)->sin_addr;
 		port = ntohs(((struct sockaddr_in *) addr)->sin_port);
 	}
+    PDEBUG("##@@##%s,%d\n",__FUNCTION__,__LINE__);
 
 	for(i = 0; i < num_localnet_addr && !remote_dns_connect; i++) {
 		if((localnet_addr[i].in_addr.s_addr & localnet_addr[i].netmask.s_addr)
@@ -469,10 +475,11 @@ int connect(int sock, const struct sockaddr *addr, socklen_t len) {
 
 	dest_ip.as_int = SOCKADDR(*addr);
 
-	ret = connect_proxy_chain(sock,
-				  dest_ip,
+	ret = connect_proxy_chain(sock, //##@@##
+				  dest_ip, //Ŀ±IP
 				  SOCKPORT(*addr),
-				  proxychains_pd, proxychains_proxy_count, proxychains_ct, proxychains_max_chain);
+				  proxychains_pd, //##@@## contain the proxy node desc, including proxy ip/port, type, state
+                  proxychains_proxy_count, proxychains_ct, proxychains_max_chain);
 
 	fcntl(sock, F_SETFL, flags);
 	if(ret != SUCCESS)

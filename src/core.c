@@ -209,7 +209,7 @@ static int timed_connect(int sock, const struct sockaddr *addr, socklen_t len) {
 	pfd[0].fd = sock;
 	pfd[0].events = POLLOUT;
 	fcntl(sock, F_SETFL, O_NONBLOCK);
-	ret = true_connect(sock, addr, len);
+	ret = true_connect(sock, addr, len); //##@@##
 	PDEBUG("\nconnect ret=%d\n", ret);
 
 	if(ret == -1 && errno == EINPROGRESS) {
@@ -243,7 +243,9 @@ static int timed_connect(int sock, const struct sockaddr *addr, socklen_t len) {
 #define INVALID_INDEX 0xFFFFFFFFU
 #define HTTP_AUTH_MAX ((0xFF * 2) + 1 + 1)
 
-static int tunnel_to(int sock, ip_type ip, unsigned short port, proxy_type pt, char *user, char *pass) {
+static int tunnel_to(int sock, ip_type ip, unsigned short port,//##@@## ip/port: the 'to' proxy node, 
+        proxy_type pt, char *user, char *pass) {
+
 	char *dns_name = NULL;
 	size_t dns_len = 0;
 
@@ -310,6 +312,7 @@ static int tunnel_to(int sock, ip_type ip, unsigned short port, proxy_type pt, c
 
 				len = strlen((char *) buff);
 
+                PDEBUG("##@@##: %s: %d: send %s\n", __FUNCTION__,__LINE__, buff);
 				if(len != (size_t) send(sock, buff, len, 0))
 					goto err;
 
@@ -325,6 +328,8 @@ static int tunnel_to(int sock, ip_type ip, unsigned short port, proxy_type pt, c
 					   buff[len - 2] == '\r' && buff[len - 3] == '\n' && buff[len - 4] == '\r')
 						break;
 				}
+                //echo "HTTP/1.1 200 OK\r\n\r\n" | nc -l -p 3333
+                PDEBUG("##@@##: %s: %d: read %s\n", __FUNCTION__,__LINE__, buff);
 
 				// if not ok (200) or response greather than BUFF_SIZE return BLOCKED;
 				if(len == BUFF_SIZE || !(buff[9] == '2' && buff[10] == '0' && buff[11] == '0'))
@@ -488,7 +493,7 @@ static int tunnel_to(int sock, ip_type ip, unsigned short port, proxy_type pt, c
 #define ST "Strict chain"
 #define RT "Random chain"
 
-static int start_chain(int *fd, proxy_data * pd, char *begin_mark) {
+static int start_chain(int *fd, proxy_data * pd, char *begin_mark) { //##@@## create socket fd, use to connect to proxy node, if connected, set to BUSY_STATE
 	struct sockaddr_in addr;
 	char ip_buf[16];
 
@@ -504,11 +509,11 @@ static int start_chain(int *fd, proxy_data * pd, char *begin_mark) {
 	addr.sin_family = AF_INET;
 	addr.sin_addr.s_addr = (in_addr_t) pd->ip.as_int;
 	addr.sin_port = pd->port;
-	if(timed_connect(*fd, (struct sockaddr *) &addr, sizeof(addr))) {
+	if(timed_connect(*fd, (struct sockaddr *) &addr, sizeof(addr))) { //##@@##
 		pd->ps = DOWN_STATE;
 		goto error1;
 	}
-	pd->ps = BUSY_STATE;
+	pd->ps = BUSY_STATE; //##@@##
 	return SUCCESS;
 	error1:
 	proxychains_write_log(TP " timeout\n");
@@ -532,7 +537,7 @@ unsigned int get_rand_int(unsigned int range){
     }
 }
 
-static proxy_data *select_proxy(select_type how, proxy_data * pd, unsigned int proxy_count, unsigned int *offset) {
+static proxy_data *select_proxy(select_type how, proxy_data * pd, unsigned int proxy_count, unsigned int *offset) { //##@@##
 	unsigned int i = 0, k = 0;
 
 	if(*offset >= proxy_count)
@@ -545,7 +550,7 @@ static proxy_data *select_proxy(select_type how, proxy_data * pd, unsigned int p
 				i = 0 + get_rand_int(proxy_count);
 			} while(pd[i].ps != PLAY_STATE && k < proxy_count * 100);
 			break;
-		case FIFOLY:
+		case FIFOLY: //##@@##
 			for(i = *offset; i < proxy_count; i++) {
 				if(pd[i].ps == PLAY_STATE) {
 					*offset = i;
@@ -585,7 +590,8 @@ static unsigned int calc_alive(proxy_data * pd, unsigned int proxy_count) {
 	return alive_count;
 }
 
-static int chain_step(int ns, proxy_data * pfrom, proxy_data * pto) {
+static int chain_step(int ns, proxy_data * pfrom, proxy_data * pto) {//##@@## ns: socket fs connected to the first proxy node, created in start_chain() funcation call.
+    PDEBUG("##@@## %s, %d", __FUNCTION__,__LINE__);
 	int retcode = -1;
 	char *hostname;
 	char ip_buf[16];
@@ -603,10 +609,11 @@ static int chain_step(int ns, proxy_data * pfrom, proxy_data * pto) {
 	}
 
 	proxychains_write_log(TP " %s:%d ", hostname, htons(pto->port));
-	retcode = tunnel_to(ns, pto->ip, pto->port, pfrom->pt, pfrom->user, pfrom->pass);
+	retcode = tunnel_to(ns, pto->ip, pto->port, //##@@## pass the current used proxy node ip/port
+            pfrom->pt, pfrom->user, pfrom->pass); //##@@##
 	switch (retcode) {
 		case SUCCESS:
-			pto->ps = BUSY_STATE;
+			pto->ps = BUSY_STATE; //##@@##
 			break;
 		case BLOCKED:
 			pto->ps = BLOCKED_STATE;
@@ -622,9 +629,13 @@ static int chain_step(int ns, proxy_data * pfrom, proxy_data * pto) {
 	return retcode;
 }
 
-int connect_proxy_chain(int sock, ip_type target_ip,
-			unsigned short target_port, proxy_data * pd,
-			unsigned int proxy_count, chain_type ct, unsigned int max_chain) {
+int connect_proxy_chain(int sock,
+            ip_type target_ip, //##@@## target ip
+			unsigned short target_port,
+            proxy_data * pd, //##@@## array for proxy nodes desc
+			unsigned int proxy_count, //##@@## len of above pd array
+            chain_type ct,
+            unsigned int max_chain) {//##@@## chain length, specified in conf file, chain_len
 	proxy_data p4;
 	proxy_data *p1, *p2, *p3;
 	int ns = -1;
@@ -643,9 +654,9 @@ int connect_proxy_chain(int sock, ip_type target_ip,
 			calc_alive(pd, proxy_count);
 			offset = 0;
 			do {
-				if(!(p1 = select_proxy(FIFOLY, pd, proxy_count, &offset)))
+				if(!(p1 = select_proxy(FIFOLY, pd, proxy_count, &offset))) //##@@##
 					goto error_more;
-			} while(SUCCESS != start_chain(&ns, p1, DT) && offset < proxy_count);
+			} while(SUCCESS != start_chain(&ns, p1, DT) && offset < proxy_count);//##@@##
 			for(;;) {
 				p2 = select_proxy(FIFOLY, pd, proxy_count, &offset);
 				if(!p2)
@@ -663,30 +674,42 @@ int connect_proxy_chain(int sock, ip_type target_ip,
 				goto error;
 			break;
 
-		case STRICT_TYPE:
+		case STRICT_TYPE: //##@@##
+            /*
+             select_proxy
+             start_chain
+             loop all remained proxy node:
+                select_proxy
+                chain_step
+            chain_step(real target addr)
+            */
 			calc_alive(pd, proxy_count);
 			offset = 0;
-			if(!(p1 = select_proxy(FIFOLY, pd, proxy_count, &offset))) {
+			if(!(p1 = select_proxy(FIFOLY, pd, proxy_count, &offset))) { //p1 point to the selected proxy node
 				PDEBUG("select_proxy failed\n");
 				goto error_strict;
 			}
-			if(SUCCESS != start_chain(&ns, p1, ST)) {
+            PDEBUG("##@@## %s:%d, before start_chain", __FUNCTION__,__LINE__);
+			if(SUCCESS != start_chain(&ns, p1, ST)) { //##@@## fill ns with a new created socket fd, which is used to connected to the selected proxy node
 				PDEBUG("start_chain failed\n");
 				goto error_strict;
 			}
 			while(offset < proxy_count) {
-				if(!(p2 = select_proxy(FIFOLY, pd, proxy_count, &offset)))
+				if(!(p2 = select_proxy(FIFOLY, pd, proxy_count, &offset))) //ѡÔÏһ¸öe
 					break;
-				if(SUCCESS != chain_step(ns, p1, p2)) {
+				if(SUCCESS != chain_step(ns, p1, p2)) { //##@@##, p1 point to the previous node linked, p2 point to the current node to be linked
+                    //send "connect p2 ip HTTP/1.1..." to socket fd 'ns', based on ns/p1's proxy type, and p1's user/passwd
+                    //p1 will execute the "connect p2 HTTP.." command => work as a proxy
 					PDEBUG("chain_step failed\n");
 					goto error_strict;
 				}
 				p1 = p2;
 			}
 			//proxychains_write_log(TP);
-			p3->ip = target_ip;
+			p3->ip = target_ip; //##@@## target_ip point to the target ip addr that the target program wanna access
 			p3->port = target_port;
-			if(SUCCESS != chain_step(ns, p1, p3))
+            //##@@## let the last proxy node connect to the target ip
+			if(SUCCESS != chain_step(ns, p1, p3)) //##@@## p1 point to the lasst proxy node linked, p3 point to the real target address.
 				goto error;
 			break;
 
@@ -702,16 +725,16 @@ int connect_proxy_chain(int sock, ip_type target_ip,
 			while(++curr_len < max_chain) {
 				if(!(p2 = select_proxy(RANDOMLY, pd, proxy_count, &offset)))
 					goto error_more;
-				if(SUCCESS != chain_step(ns, p1, p2)) {
+				if(SUCCESS != chain_step(ns, p1, p2)) { //##@@##
 					PDEBUG("GOTO AGAIN 2\n");
 					goto again;
 				}
 				p1 = p2;
 			}
 			//proxychains_write_log(TP);
-			p3->ip = target_ip;
+			p3->ip = target_ip; //##@@## real ip we want to access
 			p3->port = target_port;
-			if(SUCCESS != chain_step(ns, p1, p3))
+			if(SUCCESS != chain_step(ns, p1, p3)) //##@@##
 				goto error;
 	}
 
@@ -829,7 +852,7 @@ struct hostent *proxy_gethostbyname(const char *name, struct gethostbyname_data*
 
 	MUTEX_UNLOCK(&internal_ips_lock);
 
-	strncpy(data->addr_name, name, sizeof(data->addr_name));
+	strncpy(data->addr_name, name, sizeof(data->addr_name)-1);
 
 	data->hostent_space.h_name = data->addr_name;
 	data->hostent_space.h_length = sizeof(in_addr_t);
@@ -914,7 +937,7 @@ int proxy_getaddrinfo(const char *node, const char *service, const struct addrin
 
 	p->ai_addr = &space->sockaddr_space;
 	if(node)
-		strncpy(space->addr_name, node, sizeof(space->addr_name));
+		strncpy(space->addr_name, node, sizeof(space->addr_name)-1);
 	p->ai_canonname = space->addr_name;
 	p->ai_next = NULL;
 	p->ai_family = space->sockaddr_space.sa_family = AF_INET;

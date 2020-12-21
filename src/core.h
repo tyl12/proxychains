@@ -148,7 +148,7 @@ struct hostent* proxy_gethostbyname(const char *, struct gethostbyname_data *);
 void proxy_getservbyname(const char *, struct servent *, char *, size_t, struct servent **);
 int proxy_getaddrinfo(const char *, const char *, const struct addrinfo *, struct addrinfo **);
 void proxy_freeaddrinfo(struct addrinfo *);
-
+#define DEBUG
 #ifdef DEBUG
 # define PDEBUG(fmt, args...) do { fprintf(stderr,"DEBUG:"fmt, ## args); fflush(stderr); } while(0)
 #else
